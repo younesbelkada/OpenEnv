@@ -132,6 +132,34 @@ def test_no_atif_is_not_a_failure():
     assert "no_atif" in codes(report)
 
 
+# --- reasoning counted apart -------------------------------------------------
+def reasoning_trace(answer, reasoning):
+    """An opencode-style trace: `completion_tokens` is the visible answer, the thinking is in `extra`."""
+    return {
+        "schema_version": "1.0",
+        "agent": {"name": "opencode"},
+        "steps": [
+            {
+                "source": "agent",
+                "metrics": {"completion_tokens": a, "extra": {"reasoning_tokens": r}},
+            }
+            for a, r in zip(answer, reasoning)
+        ],
+    }
+
+
+def test_reasoning_tokens_logged_apart_still_reconcile():
+    """A thinking model's calls sample reasoning and answer together; opencode logs them apart."""
+    report = reconcile(document([10, 20, 30]), reasoning_trace([4, 6, 30], [6, 14, 0]))
+    assert report.ok
+    assert not fatal_codes(report)
+
+
+def test_reasoning_tokens_cannot_hide_a_real_disagreement():
+    report = reconcile(document([10, 21, 30]), reasoning_trace([4, 6, 30], [6, 14, 0]))
+    assert not report.ok
+
+
 # --- disagreement -----------------------------------------------------------
 def test_atif_logging_more_calls_than_were_captured_is_fatal():
     """Calls the harness made that never reached the proxy mean the capture is incomplete."""

@@ -113,11 +113,22 @@ def agent_steps(atif: dict[str, Any]) -> list[dict[str, Any]]:
     return [s for s in (atif.get("steps") or []) if s.get("source") == "agent"]
 
 
-def atif_turn_lengths(atif: dict[str, Any]) -> list[int]:
-    return [
-        int((s.get("metrics") or {}).get("completion_tokens") or 0)
-        for s in agent_steps(atif)
-    ]
+def atif_turn_lengths(
+    atif: dict[str, Any], *, include_reasoning: bool = False
+) -> list[int]:
+    """Tokens each agent step generated, as the harness reports them.
+
+    With `include_reasoning`, a step's `metrics.extra.reasoning_tokens` is added: some harnesses
+    (opencode) count a thinking model's reasoning apart from the visible answer in `completion_tokens`.
+    """
+    lengths = []
+    for step in agent_steps(atif):
+        metrics = step.get("metrics") or {}
+        n = int(metrics.get("completion_tokens") or 0)
+        if include_reasoning:
+            n += int((metrics.get("extra") or {}).get("reasoning_tokens") or 0)
+        lengths.append(n)
+    return lengths
 
 
 def _subsequence_gap(needle: list[int], haystack: list[int]) -> list[int] | None:
@@ -358,6 +369,15 @@ def reconcile(document: dict[str, Any], atif: dict[str, Any] | None) -> Report:
     turns = [t for t in document.get("turns", []) if t["root_id"] in agent_roots]
     ours_all = [t["n_sampled"] for t in turns]
     theirs = atif_turn_lengths(atif)
+    # The proxy samples the reasoning and the answer as one completion. Count a harness's separate
+    # reasoning tokens in only when that is what makes the traces agree, so a real disagreement
+    # still fails below.
+    with_reasoning = atif_turn_lengths(atif, include_reasoning=True)
+    if with_reasoning != theirs and (
+        with_reasoning == ours_all
+        or _subsequence_gap(with_reasoning, ours_all) is not None
+    ):
+        theirs = with_reasoning
 
     if _partial_usage_matches_by_call_id(turns, agent_steps(atif)):
         report.add(
