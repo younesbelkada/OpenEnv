@@ -4,14 +4,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""The upstream Harbor defect that cost `openclaw` its ATIF trajectory.
+"""Upstream Harbor defects fixed in `install_fixes`: the one that cost `openclaw` its ATIF
+trajectory, and the two that keep `hermes` from installing.
 
-The sibling `hermes` fix went away with the seam itself: hermes-agent fails to install
-(`exit 127`, 5/5 attempts), so there is nothing left to intercept.
-
-Both failed the same way: no error, no exception, no missing file -- just an agent that quietly
+The openclaw defect fails quietly: no error, no exception, no missing file -- just an agent that
 produced no trace, so every rollout reported `atif=none` and the cross-check silently did not exist.
-Neither is detectable from a passing rollout, which is why they are pinned here.
+It is not detectable from a passing rollout, which is why it is pinned here.
 """
 
 from __future__ import annotations
@@ -341,3 +339,42 @@ async def test_openclaw_catalog_model_id_is_local_to_its_provider(
     launch_env = launches[0].kwargs["env"]
     assert launch_env["OPENAI_API_KEY"] == session
     assert Template(catalog["apiKey"]).substitute(launch_env) == session
+
+
+def test_hermes_seam_routes_through_the_install_fix():
+    from openenv.harbor.seams import get
+
+    seam = get("hermes")
+    assert seam.import_path == "openenv.harbor.install_fixes:InterceptHermes"
+    model, _, env, _ = seam.resolve(
+        base_url="https://capture.example",
+        session="session-test",
+        model="Qwen/Qwen3.5-4B",
+    )
+    assert model == "openai/Qwen3.5-4B"
+    assert env["OPENAI_BASE_URL"] == "https://capture.example/v1"
+    assert env["OPENAI_API_KEY"] == "session-test"
+
+
+@pytest.mark.asyncio
+async def test_hermes_install_checks_the_version_and_installs_into_its_home(
+    tmp_path, monkeypatch
+):
+    """Harbor verifies with `hermes version` (now `--version`) and installs outside HERMES_HOME."""
+    from unittest.mock import AsyncMock
+
+    pytest.importorskip("harbor.agents.installed.hermes")
+    execution = AsyncMock()
+    monkeypatch.setattr(install_fixes.Hermes, "exec_as_agent", execution)
+    agent = install_fixes.InterceptHermes(logs_dir=tmp_path, model_name="openai/m")
+    monkeypatch.setattr(agent, "ensure_system_dependencies", AsyncMock())
+    await agent.install(object())
+    (install,) = [
+        call.kwargs.get("command") or call.args[1]
+        for call in execution.call_args_list
+        if "install.sh" in (call.kwargs.get("command") or call.args[1])
+    ]
+    assert "--skip-setup --hermes-home /tmp/hermes" in install
+    assert "hermes --version" in install
+    assert "hermes version" not in install
+    assert agent.get_version_command().endswith("hermes --version")

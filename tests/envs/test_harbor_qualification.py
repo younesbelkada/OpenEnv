@@ -6,7 +6,7 @@ from openenv.harbor.seams import SEAMS
 
 def test_all_current_adapters_start_unqualified_for_every_provider():
     rows = qualification_rows(list(SEAMS))
-    assert len(rows) == 29
+    assert len(rows) == 30
     assert all(row[1:] == ["not_run"] * 4 for row in rows)
 
 

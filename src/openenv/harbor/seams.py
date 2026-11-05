@@ -532,12 +532,18 @@ SEAMS: dict[str, Seam] = {
     # These follow the same two shapes seen everywhere: a key + base URL pair, delivered through
     # `_get_env` (so agent_env works) or `os.environ` (so the process env is forced). Where the
     # wrapper reads os.environ directly, both channels are set and the grader warning fires.
-    # hermes: REMOVED, not merely untested. Measured across 5 DataAgent tasks it failed 5/5 before the
-    # agent started — `exit 127` from
-    # `curl -fsSL .../NousResearch/hermes-agent/main/scripts/install.sh | bash` — so every attempt cost
-    # a sandbox and several minutes to learn nothing. The capture layer reported it correctly ("the
-    # intercept saw no model calls: the agent never reached it"), which is how it was found. The
-    # `InterceptHermes` subclass is gone with it; re-adding both needs the install to work first.
+    "hermes": Seam(
+        name="hermes",
+        status="untested",
+        dialect="openai_chat",
+        # Removed once because its install failed 5/5 (`exit 127` from hermes-agent's install.sh).
+        # Harbor 0.24 fixed that install (it now installs curl, git, ripgrep and xz first, with a 1200 s
+        # setup floor) and routes `openai/<model>` to hermes's `openai-api` provider, which honours
+        # OPENAI_BASE_URL. Two install defects remain; `InterceptHermes` fixes them.
+        import_path="openenv.harbor.install_fixes:InterceptHermes",
+        model_fmt="openai/{model}",
+        agent_env={"OPENAI_API_KEY": "{session}", "OPENAI_BASE_URL": "{base_url}/v1"},
+    ),
     "vibe": Seam(
         name="vibe",
         status="validated",

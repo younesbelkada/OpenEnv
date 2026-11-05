@@ -53,12 +53,51 @@ def _harbor(module: str, name: str) -> Any:
 ClineCli = _harbor("harbor.agents.installed.cline.cline", "ClineCli")
 ExecInput = _harbor("harbor.agents.installed.cline.cline", "ExecInput")
 GeminiCli = _harbor("harbor.agents.installed.gemini_cli", "GeminiCli")
+Hermes = _harbor("harbor.agents.installed.hermes", "Hermes")
 KimiCli = _harbor("harbor.agents.installed.kimi_cli", "KimiCli")
 OpenClaw = _harbor("harbor.agents.installed.openclaw", "OpenClaw")
 OpenHands = _harbor("harbor.agents.installed.openhands", "OpenHands")
 Pi = _harbor("harbor.agents.installed.pi", "Pi")
 SweAgent = _harbor("harbor.agents.installed.swe_agent", "SweAgent")
 BaseEnvironment = _harbor("harbor.environments.base", "BaseEnvironment")
+
+
+class InterceptHermes(Hermes):
+    """hermes, installed so that its own version check and its first start both pass.
+
+    Harbor's `Hermes.install` (0.24 and 0.25) succeeds at installing hermes-agent, then fails it twice
+    over against current hermes-agent:
+
+    - It verifies with `hermes version`, a subcommand hermes-agent replaced with `--version`:
+
+          'version' is not a hermes command
+
+      exits 2, so Harbor reports `Agent install failed` and the rollout never reaches the model.
+    - It runs hermes with `HERMES_HOME=/tmp/hermes`, but never passes that home to `install.sh`, which
+      therefore installs into `~/.hermes`. Hermes then starts in a home with no dependency environment
+      and refuses to run:
+
+          no dependency environment is committed for this install
+
+    Both are fixed in the two commands Harbor sends, so `install()` itself stays Harbor's.
+    """
+
+    HERMES_HOME = "/tmp/hermes"
+
+    def get_version_command(self) -> str | None:
+        command = super().get_version_command()
+        return command and command.replace("hermes version", "hermes --version")
+
+    async def exec_as_agent(
+        self, environment: BaseEnvironment, command: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        if "hermes-agent/main/scripts/install.sh" in command:
+            command = command.replace(
+                "bash -s -- --skip-setup",
+                f"bash -s -- --skip-setup --hermes-home {self.HERMES_HOME}",
+            )
+            command = command.replace("hermes version", "hermes --version")
+        return await super().exec_as_agent(environment, command, *args, **kwargs)
 
 
 class InterceptGeminiCli(GeminiCli):
