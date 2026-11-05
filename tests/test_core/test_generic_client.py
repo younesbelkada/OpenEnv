@@ -188,6 +188,32 @@ class TestSessionProviderCleanup:
         stop.assert_called_once_with()
 
 
+def _sync_loop_threads():
+    return {
+        thread
+        for thread in threading.enumerate()
+        if thread.name == "openenv-sync-client-loop"
+    }
+
+
+def test_sync_close_stops_the_loop_thread_sync_calls_started():
+    """Sync calls on an async client run on a loop thread it starts; close() must stop it.
+
+    Otherwise every client used this way and closed leaks a thread and its file descriptors, until
+    a long run fails with "Too many open files".
+    """
+    ws = MagicMock()
+    ws.send = AsyncMock()
+    ws.close = AsyncMock()
+    before = _sync_loop_threads()
+    with patch("openenv.core.env_client.ws_connect", AsyncMock(return_value=ws)):
+        client = GenericEnvClient(base_url="http://localhost:8000")
+        client.connect()
+        assert len(_sync_loop_threads() - before) == 1
+        client.close()
+    assert _sync_loop_threads() == before
+
+
 class TestGenericEnvClientInstantiation:
     """Test GenericEnvClient instantiation."""
 

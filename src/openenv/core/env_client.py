@@ -1079,7 +1079,13 @@ class EnvClient(ABC, Generic[ActT, ObsT, StateT]):
             )
 
     def close(self) -> Any:
-        return self._dispatch(self._close_async)
+        result = self._dispatch(self._close_async)
+        # Sync calls ran on the loop thread `_sync_client` started (see `_run_sync`). Closing
+        # synchronously is their last use, so stop that thread too, or every client closed this way
+        # leaks it and its file descriptors.
+        if self._sync_client is not None and not inspect.isawaitable(result):
+            self._sync_client._stop_loop()
+        return result
 
     async def _close_child_clients(self) -> asyncio.CancelledError | None:
         """Close every captured child while deferring caller cancellation."""
