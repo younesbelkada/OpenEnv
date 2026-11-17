@@ -214,6 +214,11 @@ def _mini_swe_agent_step_limit(limit: int) -> dict[str, Any]:
     return {"config": {"agent": {"step_limit": limit}}}
 
 
+def _pyharness_step_limit(limit: int) -> dict[str, Any]:
+    """The runner enforces it as a model-call budget, before the proxy's own cap would cut a call."""
+    return {"max_turns": limit}
+
+
 def _grok_build(base_url: str, session: str, model: str) -> dict[str, Any]:
     """Use Harbor's supported config merge, including all auxiliary model routes."""
     return {
@@ -370,6 +375,17 @@ SEAMS: dict[str, Seam] = {
         kwargs=_pi,
         notes="No base-URL seam in Harbor's wrapper; needs a models.json written into the sandbox. "
         "Defaults to the Responses API unless api=openai-completions is pinned.",
+    ),
+    "pyharness": Seam(
+        name="pyharness",
+        dialect="openai_chat",
+        # The harness is not installed but sent per rollout: `harness_config={"harness_files": {...}}`,
+        # uploaded next to a fixed runner that owns the endpoint and the call budget (see pyharness.py).
+        # Endpoint and key through `agent_env`, so they never reach the grader.
+        import_path="openenv.harbor.pyharness:PyHarnessAgent",
+        agent_env={"OPENAI_API_KEY": "{session}", "OPENAI_BASE_URL": "{base_url}/v1"},
+        step_limit=_pyharness_step_limit,
+        notes="A single-file Python agent loop, editable between rollouts without an image rebuild.",
     ),
     "claude-code": Seam(
         name="claude-code",

@@ -179,6 +179,7 @@ class HarborSession(ResourceSession):
         agent_timeout_sec: float = 0.0,
         agent_step_limit: int = 0,
         sampling: dict[str, Any] | None = None,
+        harness_config: dict[str, Any] | None = None,
         owns_env: bool = False,
     ) -> None:
         self._env = env
@@ -198,6 +199,7 @@ class HarborSession(ResourceSession):
         self._agent_timeout_sec = agent_timeout_sec
         self._agent_step_limit = agent_step_limit
         self._sampling = training_sampling(sampling) if sampling is not None else None
+        self._harness_config = harness_config
         self.result: HarborRolloutResult | None = None
 
     # --- ResourceSession -----------------------------------------------------
@@ -270,6 +272,11 @@ class HarborSession(ResourceSession):
                 # takes the same care for the same reason.
                 agent_step_limit=self._agent_step_limit,
                 **({"sampling": self._sampling} if self._sampling is not None else {}),
+                **(
+                    {"harness_config": self._harness_config}
+                    if self._harness_config is not None
+                    else {}
+                ),
                 agent_timeout_sec=(
                     timeout_s if timeout_s is not None else self._agent_timeout_sec
                 ),
@@ -371,6 +378,9 @@ class HarborSessionFactory(ResourceSessionFactory[HarborSession]):
         sampling (`dict`, *optional*):
             Explicit full-vocabulary training policy with the trainer's temperature. Validated
             before opening clients and forwarded on every session, regardless of harness.
+        harness_config (`dict`, *optional*):
+            Agent constructor kwargs, deep-merged over the seam's, sent with every session. Read at
+            `create`, so changing it changes the harness of later sessions only.
 
     Examples:
 
@@ -399,6 +409,7 @@ class HarborSessionFactory(ResourceSessionFactory[HarborSession]):
         agent_timeout_sec: float = 600.0,
         agent_step_limit: int = 0,
         sampling: dict[str, Any] | None = None,
+        harness_config: dict[str, Any] | None = None,
         num_tasks: int | None = None,
         indices: list[int] | None = None,
         max_message_size_mb: float = 4096.0,
@@ -414,6 +425,7 @@ class HarborSessionFactory(ResourceSessionFactory[HarborSession]):
         self.agent_timeout_sec = agent_timeout_sec
         self.agent_step_limit = agent_step_limit
         self.sampling = training_sampling(sampling) if sampling is not None else None
+        self.harness_config = harness_config
         self._num_tasks = num_tasks
         # Specific tasks, rather than the first N of the split. Which tasks a group trains on decides
         # whether it can learn anything at all: a task every generation solves and one none solves both
@@ -566,6 +578,7 @@ class HarborSessionFactory(ResourceSessionFactory[HarborSession]):
             agent_timeout_sec=self.agent_timeout_sec,
             agent_step_limit=self.agent_step_limit,
             sampling=self.sampling,
+            harness_config=self.harness_config,
         )
 
 

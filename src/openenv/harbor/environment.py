@@ -99,6 +99,7 @@ class HarborEnvironment(MCPEnvironment):
             provider: str = "openai",
             purpose: str = "auto",
             eval_sampling: dict[str, Any] | None = None,
+            harness_config: dict[str, Any] | None = None,
         ) -> str:
             """Run one Harbor rollout and return a JSON `HarborRolloutResult`.
 
@@ -109,6 +110,8 @@ class HarborEnvironment(MCPEnvironment):
             captured model calls, including auxiliary calls, and sets a native step limit where
             supported. Zero leaves calls uncapped. `sampling={"temperature": ...}` pins an explicit
             full-vocabulary training policy; use the same temperature as the trainer.
+            `harness_config` is deep-merged into the agent's constructor kwargs for this rollout
+            only; the `pyharness` seam takes its harness files this way.
 
             Naming `llm_url` probes that engine (once per engine, then cached) and decides this
             rollout's tier from what it can actually return: token ids and processed logprobs mean
@@ -134,6 +137,7 @@ class HarborEnvironment(MCPEnvironment):
                 provider,
                 purpose,
                 eval_sampling,
+                harness_config,
             )
 
         @mcp.tool
@@ -245,6 +249,7 @@ class HarborEnvironment(MCPEnvironment):
         provider: str = "openai",
         purpose: str = "auto",
         eval_sampling: dict[str, Any] | None = None,
+        harness_config: dict[str, Any] | None = None,
     ) -> str:
         from .models import HarborRolloutResult
         from .rollout import run_rollout as _run
@@ -327,6 +332,7 @@ class HarborEnvironment(MCPEnvironment):
                 agent_timeout_sec=agent_timeout_sec or None,
                 agent_step_limit=agent_step_limit or None,
                 sampling=sampling,
+                harness_config=harness_config,
             )
 
         result = await _resolve_and_run()

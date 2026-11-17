@@ -96,6 +96,7 @@ class HarborEnv(MCPToolClient):
         agent_timeout_sec: float = 0.0,
         agent_step_limit: int = 0,
         sampling: dict[str, Any] | None = None,
+        harness_config: dict[str, Any] | None = None,
     ) -> HarborRolloutResult:
         """Run one rollout and return its result.
 
@@ -133,6 +134,9 @@ class HarborEnv(MCPToolClient):
             sampling (`dict`, *optional*):
                 Explicit full-vocabulary training policy, e.g. `{"temperature": 0.8}`. Use the
                 trainer's recompute temperature. Requested and submitted policies remain separate.
+            harness_config (`dict`, *optional*):
+                Agent constructor kwargs for this rollout only, deep-merged over the seam's. The
+                `pyharness` seam takes its harness here, as `{"harness_files": {"harness.py": ...}}`.
 
         Returns:
             [`HarborRolloutResult`]: Reward, per-turn token ids and logprobs, and findings.
@@ -159,6 +163,9 @@ class HarborEnv(MCPToolClient):
             agent_timeout_sec=agent_timeout_sec,
             agent_step_limit=agent_step_limit,
             **({"sampling": sampling} if sampling is not None else {}),
+            **(
+                {"harness_config": harness_config} if harness_config is not None else {}
+            ),
         )
         return HarborRolloutResult.model_validate_json(_as_text(raw))
 

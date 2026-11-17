@@ -207,6 +207,7 @@ def build_trial_config(
     force_build: bool = False,
     training: bool = False,
     harness_profile: str | None = None,
+    harness_config: dict[str, Any] | None = None,
 ) -> Any:
     """Assemble Harbor's `TrialConfig` for one rollout.
 
@@ -230,6 +231,8 @@ def build_trial_config(
         step_limit=agent_step_limit,
         training=training,
     )
+    if harness_config:
+        kwargs = seams._deep_merge(kwargs, harness_config)
 
     # Deployment-level pins use Harbor's existing InstalledAgent(version=...) support.
     # Unlisted harnesses retain Harbor's default; malformed pins must not reach an installer.
@@ -299,6 +302,7 @@ async def run_rollout(
     purpose: str = "auto",
     eval_sampling: dict[str, Any] | None = None,
     harness_profile: str | None = None,
+    harness_config: dict[str, Any] | None = None,
     on_session_created: Callable[[str], None] | None = None,
 ) -> HarborRolloutResult:
     """Run one rollout end to end. Never raises.
@@ -339,6 +343,9 @@ async def run_rollout(
             sampling. Overrides harness sampling settings and records both requested and submitted
             values. Must match the trainer's recompute temperature. Also selects the seam's native
             training settings; OpenCode disables delegation, questions and web fetch.
+        harness_config (`dict`, *optional*):
+            Agent constructor kwargs for this rollout only, deep-merged over the seam's. The `pyharness`
+            seam takes its harness here, as `{"harness_files": {"harness.py": ...}}`.
         on_session_created (`Callable[[str], None]`, *optional*):
             Receive this rollout's capture session ID before the agent starts. Live views must
             follow this ID rather than discover unrelated sessions from the shared registry.
@@ -444,6 +451,7 @@ async def run_rollout(
                 force_build=force_build,
                 training=sampling is not None,
                 harness_profile=harness_profile,
+                harness_config=harness_config,
             )
 
             # Held across construction because Harbor's wrappers read `os.environ` while building the
@@ -619,6 +627,11 @@ async def run_rollout(
                         )
 
             trial_dir = _trial_dir(trial_result, trials_dir, trial_name)
+            # An agent that writes /logs/agent/agent.log (pyharness does) gets its tail here, the one place a
+            # harness's own traceback reaches the caller.
+            agent_log = Path(trial_dir, "agent", "agent.log") if trial_dir else None
+            if agent_log is not None and agent_log.is_file():
+                result.agent_log_tail = agent_log.read_text(errors="replace")[-4000:]
             # Not every harness writes ATIF. Three of the sixteen (hermes, openclaw, pi) emit no
             # `trajectory.json`, which left them with no independent check at all. pi does record the
             # same information in its own session log, so `load_trace` falls back to that; hermes writes
